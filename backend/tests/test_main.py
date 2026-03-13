@@ -3,6 +3,7 @@ from pathlib import Path
 
 from fastapi.testclient import TestClient
 
+from app.ai_client import AIConfigError, AIRequestError
 from app.main import create_app
 
 
@@ -84,3 +85,63 @@ def test_database_file_and_tables_are_created(tmp_path: Path) -> None:
         }
     assert "users" in tables
     assert "boards" in tables
+
+
+def test_ai_debug_endpoint_returns_connectivity_payload(
+    tmp_path: Path, monkeypatch
+) -> None:
+    class StubOpenAIClient:
+        def __init__(self) -> None:
+            self.model = "gpt-4.1-mini"
+
+        def chat_completion(self, prompt: str) -> str:
+            assert "2+2" in prompt
+            return "4"
+
+    monkeypatch.setattr("app.main.OpenAIClient", StubOpenAIClient)
+
+    client = create_test_client(tmp_path / "ai-debug.db")
+    response = client.get("/api/ai/debug")
+    assert response.status_code == 200
+    assert response.json() == {
+        "status": "ok",
+        "model": "gpt-4.1-mini",
+        "prompt": "2+2",
+        "response": "4",
+    }
+
+
+def test_ai_debug_endpoint_returns_runtime_config_error(
+    tmp_path: Path, monkeypatch
+) -> None:
+    class StubOpenAIClient:
+        def __init__(self) -> None:
+            self.model = "gpt-4.1-mini"
+
+        def chat_completion(self, prompt: str) -> str:
+            raise AIConfigError("missing key")
+
+    monkeypatch.setattr("app.main.OpenAIClient", StubOpenAIClient)
+
+    client = create_test_client(tmp_path / "ai-config-error.db")
+    response = client.get("/api/ai/debug")
+    assert response.status_code == 503
+    assert response.json()["detail"] == "missing key"
+
+
+def test_ai_debug_endpoint_returns_runtime_request_error(
+    tmp_path: Path, monkeypatch
+) -> None:
+    class StubOpenAIClient:
+        def __init__(self) -> None:
+            self.model = "gpt-4.1-mini"
+
+        def chat_completion(self, prompt: str) -> str:
+            raise AIRequestError("upstream error")
+
+    monkeypatch.setattr("app.main.OpenAIClient", StubOpenAIClient)
+
+    client = create_test_client(tmp_path / "ai-request-error.db")
+    response = client.get("/api/ai/debug")
+    assert response.status_code == 502
+    assert response.json()["detail"] == "upstream error"
