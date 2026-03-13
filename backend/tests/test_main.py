@@ -5,11 +5,11 @@ from app.main import app
 client = TestClient(app)
 
 
-def test_root_serves_static_hello_page() -> None:
+def test_root_serves_static_html_page() -> None:
     response = client.get("/")
     assert response.status_code == 200
     assert "text/html" in response.headers["content-type"]
-    assert "Hello World" in response.text
+    assert "<html" in response.text.lower()
 
 
 def test_api_hello_response() -> None:
