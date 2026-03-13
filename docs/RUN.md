@@ -1,4 +1,4 @@
-# Running Part 2 Scaffold
+# Running the App (Parts 2-3)
 
 ## Start
 
@@ -14,10 +14,12 @@
 
 ## Verify
 
-- Static hello page: `http://127.0.0.1:8000/`
+- Kanban board page: `http://127.0.0.1:8000/`
 - API endpoint: `http://127.0.0.1:8000/api/hello`
 
-Expected API response:
+Expected checks:
+- `/` loads the built Next.js Kanban UI and includes the "Kanban Studio" heading.
+- `/api/hello` returns:
 
 ```json
 {
