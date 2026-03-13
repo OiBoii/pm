@@ -5,18 +5,23 @@ This document describes the current frontend codebase so future tasks can be exe
 ## Overview
 
 - Stack: Next.js App Router, React 19, TypeScript, Tailwind CSS v4.
-- Purpose: Single-page Kanban demo app ("Kanban Studio") with in-memory state only.
-- Entry route: `/` renders the board directly.
-- Current status: Pure frontend implementation; no auth, no backend API, no persistence.
+- Purpose: Kanban MVP frontend with demo auth gate and in-memory board state.
+- Entry route: `/` renders an auth gate, then the board when authenticated.
+- Current status: Frontend auth flow implemented (`user` / `password`), backend persistence not yet integrated.
 
 ## File map
 
 - `src/app/page.tsx`
   - Home page entrypoint.
-  - Renders `<KanbanBoard />`.
+  - Renders `<AuthGate />`.
+- `src/components/AuthGate.tsx`
+  - Client-side login gate.
+  - Validates hardcoded credentials and stores auth state in `sessionStorage`.
+  - Renders wrapper-level logout action and `<KanbanBoard />` for authenticated users.
 - `src/components/KanbanBoard.tsx`
   - Main board state container and interaction orchestration.
   - Handles drag start/end, column rename, add card, delete card.
+  - Uses a container-aware collision strategy with explicit column drop zones for reliable drag/drop behavior.
 - `src/components/KanbanColumn.tsx`
   - Column UI, rename input, list of sortable cards, empty drop zone, add-card form.
 - `src/components/KanbanCard.tsx`
@@ -31,6 +36,7 @@ This document describes the current frontend codebase so future tasks can be exe
 ## Current behavior
 
 - Board has five seeded columns with initial cards from `initialData`.
+- User must log in with `user` / `password` to access the board.
 - User can:
   - rename column titles inline
   - add new cards per column
@@ -45,6 +51,7 @@ This document describes the current frontend codebase so future tasks can be exe
 - `DndContext` is mounted at board level.
 - `SortableContext` is mounted per column, keyed by `column.cardIds`.
 - `moveCard(columns, activeId, overId)` handles:
+  - cross-column insert positioning via `insertAfter` for accurate before/after target placement
   - reorder within same column
   - move across columns
   - drop onto a column container to append at end
@@ -66,6 +73,10 @@ This document describes the current frontend codebase so future tasks can be exe
 ## Testing baseline
 
 - Unit/component tests:
+  - `src/components/AuthGate.test.tsx`
+    - shows login form while logged out
+    - rejects invalid credentials
+    - accepts valid credentials and supports logout
   - `src/components/KanbanBoard.test.tsx`
     - renders five columns
     - renames a column
@@ -84,8 +95,8 @@ This document describes the current frontend codebase so future tasks can be exe
 
 ## Known constraints and implications
 
-- No server boundary yet; all board mutations are client-local.
-- No user/session model yet.
+- No backend persistence yet; board mutations are client-local.
+- Auth/session is frontend-only and demo-scoped (sessionStorage + hardcoded credentials).
 - No persistence layer; refreshing resets to seed data.
 - No AI sidebar implementation yet.
 

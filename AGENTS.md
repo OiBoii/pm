@@ -45,6 +45,21 @@ A working MVP of the frontend has been built and is already in frontend. This is
 2. Keep it simple - NEVER over-engineer, ALWAYS simplify, NO unnecessary defensive programming. No extra features - focus on simplicity.
 3. Be concise. Keep README minimal. IMPORTANT: no emojis ever
 4. When hitting issues, always identify root cause before trying a fix. Do not guess. Prove with evidence, then fix the root cause.
+5. Enforce strict separation of concerns:
+   - Auth/session logic belongs in app wrappers, layouts, middleware, or dedicated auth modules.
+   - Domain UI components (e.g. Kanban board) must remain focused on domain behavior and avoid auth/persistence concerns.
+   - Shared domain logic belongs in `lib/` modules and should be UI-framework agnostic where practical.
+6. Keep component boundaries professional and predictable:
+   - Prefer single-responsibility components and small, composable abstractions.
+   - Avoid dead code, duplicate logic, and incidental coupling between unrelated features.
+   - Avoid unnecessary non-null assertions and implicit assumptions when safer typed guards are straightforward.
+7. Quality gates are mandatory for all meaningful changes:
+   - Frontend: unit tests and e2e tests must pass.
+   - Backend: unit tests must pass.
+   - No knowingly ignored failing tests or lint/type errors.
+8. Preserve maintainability:
+   - Keep architecture and docs in sync with current implementation.
+   - Favor readability and explicit intent over clever or brittle shortcuts.
 
 ## Working documentation
 
