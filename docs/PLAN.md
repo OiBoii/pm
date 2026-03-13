@@ -167,22 +167,22 @@ Key decisions captured during implementation:
 ## Part 9: Structured Output Protocol for Board Updates
 
 ### Checklist
-- [ ] Define one structured output schema containing:
-  - [ ] assistant text response
-  - [ ] optional Kanban mutation instructions
-- [ ] Send board JSON + user question + conversation history to AI request.
-- [ ] Validate AI output strictly against the schema.
-- [ ] Apply valid mutations; ignore/handle invalid mutations safely.
-- [ ] Document schema/protocol in docs.
+- [x] Define one structured output schema containing:
+  - [x] assistant text response
+  - [x] optional Kanban mutation instructions
+- [x] Send board JSON + user question + conversation history to AI request.
+- [x] Validate AI output strictly against the schema.
+- [x] Apply valid mutations; ignore/handle invalid mutations safely.
+- [x] Document schema/protocol in docs.
 
 ### Tests
-- [ ] Schema validation tests: valid, malformed, and partial outputs.
-- [ ] Mutation tests: create/edit/move operations update board correctly.
-- [ ] Regression tests: non-mutation responses do not change board.
+- [x] Schema validation tests: valid, malformed, and partial outputs.
+- [x] Mutation tests: create/edit/move operations update board correctly.
+- [x] Regression tests: non-mutation responses do not change board.
 
 ### Success criteria
-- [ ] AI output is consistently parseable.
-- [ ] Valid structured mutations reliably update persisted board state.
+- [x] AI output is consistently parseable.
+- [x] Valid structured mutations reliably update persisted board state.
 
 ## Part 10: AI Sidebar in Frontend
 
