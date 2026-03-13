@@ -37,12 +37,13 @@ This document describes the current frontend codebase so future tasks can be exe
 
 - Board has five seeded columns with initial cards from `initialData`.
 - User must log in with `user` / `password` to access the board.
+- After login, board state is fetched from backend `GET /api/board`.
 - User can:
   - rename column titles inline
   - add new cards per column
   - delete cards
   - drag cards within and across columns
-- Board state exists only in local component state in `KanbanBoard`.
+- Board state is maintained in local component state and persisted by backend `PUT /api/board`.
 - Added card IDs are generated client-side with `createId`.
 
 ## Drag-and-drop model
@@ -95,9 +96,8 @@ This document describes the current frontend codebase so future tasks can be exe
 
 ## Known constraints and implications
 
-- No backend persistence yet; board mutations are client-local.
 - Auth/session is frontend-only and demo-scoped (sessionStorage + hardcoded credentials).
-- No persistence layer; refreshing resets to seed data.
+- Board save currently happens on each mutation; there is no debounce/batching yet.
 - No AI sidebar implementation yet.
 
 ## Guidance for upcoming integration work

@@ -32,7 +32,9 @@ describe("AuthGate", () => {
     render(<AuthGate />);
     await signIn("user", "password");
 
-    expect(screen.getByRole("heading", { name: /kanban studio/i })).toBeInTheDocument();
+    expect(
+      await screen.findByRole("heading", { name: /kanban studio/i })
+    ).toBeInTheDocument();
     expect(window.sessionStorage.getItem("pm-authenticated")).toBe("true");
 
     await userEvent.click(screen.getByRole("button", { name: /log out/i }));

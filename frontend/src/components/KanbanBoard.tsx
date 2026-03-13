@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import {
   type Collision,
   type CollisionDetection,
@@ -17,7 +17,8 @@ import {
 } from "@dnd-kit/core";
 import { KanbanColumn } from "@/components/KanbanColumn";
 import { KanbanCardPreview } from "@/components/KanbanCardPreview";
-import { createId, initialData, moveCard, type BoardData } from "@/lib/kanban";
+import { createId, moveCard, type BoardData } from "@/lib/kanban";
+import { fetchBoard, saveBoard } from "@/lib/api";
 
 const COLUMN_DROP_ZONE_PREFIX = "column-drop::";
 
@@ -30,8 +31,11 @@ const filterDropZoneHits = (hits: Collision[]) =>
   hits.filter((collision) => isColumnDropZoneId(String(collision.id)));
 
 export const KanbanBoard = () => {
-  const [board, setBoard] = useState<BoardData>(() => initialData);
+  const [board, setBoard] = useState<BoardData | null>(null);
   const [activeCardId, setActiveCardId] = useState<string | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const [saveError, setSaveError] = useState<string | null>(null);
 
   const sensors = useSensors(
     useSensor(PointerSensor, {
@@ -56,6 +60,48 @@ export const KanbanBoard = () => {
 
     return closestCorners(args);
   }, []);
+
+  const persistBoard = useCallback(async (nextBoard: BoardData) => {
+    try {
+      await saveBoard(nextBoard);
+      setSaveError(null);
+    } catch {
+      setSaveError("Could not save changes. Please try again.");
+    }
+  }, []);
+
+  const applyBoardUpdate = useCallback(
+    (update: (prev: BoardData) => BoardData) => {
+      setBoard((prev) => {
+        if (!prev) {
+          return prev;
+        }
+        const next = update(prev);
+        void persistBoard(next);
+        return next;
+      });
+    },
+    [persistBoard]
+  );
+
+  const loadBoard = useCallback(async () => {
+    setIsLoading(true);
+    setLoadError(null);
+    try {
+      const loaded = await fetchBoard();
+      setBoard(loaded);
+      setSaveError(null);
+    } catch {
+      setBoard(null);
+      setLoadError("Could not load board data.");
+    } finally {
+      setIsLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    void loadBoard();
+  }, [loadBoard]);
 
   const handleDragStart = (event: DragStartEvent) => {
     setActiveCardId(event.active.id as string);
@@ -91,14 +137,14 @@ export const KanbanBoard = () => {
       }
     }
 
-    setBoard((prev) => ({
+    applyBoardUpdate((prev) => ({
       ...prev,
       columns: moveCard(prev.columns, active.id as string, overId, insertAfter),
     }));
   };
 
   const handleRenameColumn = (columnId: string, title: string) => {
-    setBoard((prev) => ({
+    applyBoardUpdate((prev) => ({
       ...prev,
       columns: prev.columns.map((column) =>
         column.id === columnId ? { ...column, title } : column
@@ -108,7 +154,7 @@ export const KanbanBoard = () => {
 
   const handleAddCard = (columnId: string, title: string, details: string) => {
     const id = createId("card");
-    setBoard((prev) => ({
+    applyBoardUpdate((prev) => ({
       ...prev,
       cards: {
         ...prev.cards,
@@ -123,7 +169,7 @@ export const KanbanBoard = () => {
   };
 
   const handleDeleteCard = (columnId: string, cardId: string) => {
-    setBoard((prev) => ({
+    applyBoardUpdate((prev) => ({
       ...prev,
       cards: Object.fromEntries(
         Object.entries(prev.cards).filter(([id]) => id !== cardId)
@@ -136,7 +182,36 @@ export const KanbanBoard = () => {
     }));
   };
 
-  const activeCard = activeCardId ? board.cards[activeCardId] : null;
+  const activeCard = activeCardId && board ? board.cards[activeCardId] : null;
+
+  if (isLoading) {
+    return (
+      <main className="mx-auto flex min-h-screen max-w-[1500px] items-center justify-center px-6 py-12">
+        <p className="text-sm font-semibold uppercase tracking-[0.2em] text-[var(--gray-text)]">
+          Loading board...
+        </p>
+      </main>
+    );
+  }
+
+  if (loadError || !board) {
+    return (
+      <main className="mx-auto flex min-h-screen max-w-[1500px] items-center justify-center px-6 py-12">
+        <section className="rounded-2xl border border-[var(--stroke)] bg-white p-8 shadow-[var(--shadow)]">
+          <p className="text-sm font-medium text-[var(--secondary-purple)]">
+            {loadError ?? "Could not load board data."}
+          </p>
+          <button
+            type="button"
+            onClick={() => void loadBoard()}
+            className="mt-4 rounded-full bg-[var(--secondary-purple)] px-4 py-2 text-xs font-semibold uppercase tracking-wide text-white transition hover:brightness-110"
+          >
+            Retry
+          </button>
+        </section>
+      </main>
+    );
+  }
 
   return (
     <div className="relative overflow-hidden">
@@ -178,6 +253,9 @@ export const KanbanBoard = () => {
               </div>
             ))}
           </div>
+          {saveError ? (
+            <p className="text-sm font-medium text-[var(--secondary-purple)]">{saveError}</p>
+          ) : null}
         </header>
 
         <DndContext
