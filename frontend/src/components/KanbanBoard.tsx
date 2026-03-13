@@ -2,18 +2,23 @@
 
 import { useMemo, useState } from "react";
 import {
+  type CollisionDetection,
   DndContext,
   DragOverlay,
   PointerSensor,
+  closestCorners,
+  pointerWithin,
+  rectIntersection,
   useSensor,
   useSensors,
-  closestCorners,
   type DragEndEvent,
   type DragStartEvent,
 } from "@dnd-kit/core";
 import { KanbanColumn } from "@/components/KanbanColumn";
 import { KanbanCardPreview } from "@/components/KanbanCardPreview";
 import { createId, initialData, moveCard, type BoardData } from "@/lib/kanban";
+
+const COLUMN_DROP_ZONE_PREFIX = "column-drop::";
 
 export const KanbanBoard = () => {
   const [board, setBoard] = useState<BoardData>(() => initialData);
@@ -26,6 +31,35 @@ export const KanbanBoard = () => {
   );
 
   const cardsById = useMemo(() => board.cards, [board.cards]);
+  const isColumnDropZoneId = (id: string) => id.startsWith(COLUMN_DROP_ZONE_PREFIX);
+  const normalizeOverId = (id: string) =>
+    isColumnDropZoneId(id) ? id.slice(COLUMN_DROP_ZONE_PREFIX.length) : id;
+
+  const collisionDetectionStrategy: CollisionDetection = (args) => {
+    const pointerHits = pointerWithin(args);
+    if (pointerHits.length > 0) {
+      const pointerDropZoneHits = pointerHits.filter((collision) =>
+        isColumnDropZoneId(String(collision.id))
+      );
+      if (pointerDropZoneHits.length > 0) {
+        return pointerDropZoneHits;
+      }
+      return pointerHits;
+    }
+
+    const rectHits = rectIntersection(args);
+    if (rectHits.length > 0) {
+      const rectDropZoneHits = rectHits.filter((collision) =>
+        isColumnDropZoneId(String(collision.id))
+      );
+      if (rectDropZoneHits.length > 0) {
+        return rectDropZoneHits;
+      }
+      return rectHits;
+    }
+
+    return closestCorners(args);
+  };
 
   const handleDragStart = (event: DragStartEvent) => {
     setActiveCardId(event.active.id as string);
@@ -39,9 +73,11 @@ export const KanbanBoard = () => {
       return;
     }
 
+    const overId = normalizeOverId(String(over.id));
+
     setBoard((prev) => ({
       ...prev,
-      columns: moveCard(prev.columns, active.id as string, over.id as string),
+      columns: moveCard(prev.columns, active.id as string, overId),
     }));
   };
 
@@ -135,7 +171,7 @@ export const KanbanBoard = () => {
 
         <DndContext
           sensors={sensors}
-          collisionDetection={closestCorners}
+          collisionDetection={collisionDetectionStrategy}
           onDragStart={handleDragStart}
           onDragEnd={handleDragEnd}
         >
@@ -145,6 +181,7 @@ export const KanbanBoard = () => {
                 key={column.id}
                 column={column}
                 cards={column.cardIds.map((cardId) => board.cards[cardId])}
+                dropZoneId={`${COLUMN_DROP_ZONE_PREFIX}${column.id}`}
                 onRename={handleRenameColumn}
                 onAddCard={handleAddCard}
                 onDeleteCard={handleDeleteCard}
