@@ -67,6 +67,46 @@ test.beforeEach(async ({ page }) => {
     }
     await route.fulfill({ status: 405, body: "Method not allowed" });
   });
+
+  await page.route("**/api/ai/chat", async (route) => {
+    const request = route.request();
+    if (request.method() !== "POST") {
+      await route.fulfill({ status: 405, body: "Method not allowed" });
+      return;
+    }
+
+    const payload = request.postDataJSON() as { question?: string };
+    if (payload.question?.toLowerCase().includes("move card-1 to done")) {
+      board = {
+        ...board,
+        columns: board.columns.map((column) => {
+          if (column.id === "col-backlog") {
+            return {
+              ...column,
+              cardIds: column.cardIds.filter((cardId) => cardId !== "card-1"),
+            };
+          }
+          if (column.id === "col-done") {
+            return {
+              ...column,
+              cardIds: ["card-1", ...column.cardIds.filter((cardId) => cardId !== "card-1")],
+            };
+          }
+          return column;
+        }),
+      };
+    }
+
+    await route.fulfill({
+      status: 200,
+      json: {
+        assistantResponse: "Applied requested board updates.",
+        board,
+        appliedMutations: [],
+        ignoredMutations: [],
+      },
+    });
+  });
 });
 
 const signIn = async (page: Page) => {
@@ -114,4 +154,13 @@ test("moves a card between columns", async ({ page }) => {
   );
   await page.mouse.up();
   await expect(targetColumn.getByTestId("card-card-1")).toBeVisible();
+});
+
+test("sends chat request and updates board from AI response", async ({ page }) => {
+  await signIn(page);
+  await page.getByTestId("ai-chat-launcher").click();
+  await page.getByTestId("ai-chat-input").fill("Move card-1 to Done");
+  await page.getByRole("button", { name: /^send$/i }).click();
+  await expect(page.getByText("Applied requested board updates.")).toBeVisible();
+  await expect(page.getByTestId("column-col-done").getByTestId("card-card-1")).toBeVisible();
 });

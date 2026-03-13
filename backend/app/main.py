@@ -89,6 +89,7 @@ def create_app(db_path: Path | None = None) -> FastAPI:
     @app.post("/api/ai/chat")
     def ai_chat(payload: AIChatRequestModel) -> dict[str, Any]:
         current_board = get_board(resolved_db_path, MVP_USERNAME)
+
         history = [message.model_dump() for message in payload.history]
         prompt = build_ai_chat_prompt(
             board=current_board,

@@ -11,11 +11,22 @@ beforeEach(() => {
   vi.spyOn(globalThis, "fetch").mockImplementation(
     async (input: RequestInfo | URL, init?: RequestInit) => {
       const url = typeof input === "string" ? input : input.toString();
+      const method = init?.method ?? "GET";
+      if (url.endsWith("/api/ai/chat") && method === "POST") {
+        return new Response(
+          JSON.stringify({
+            assistantResponse: "No board changes needed.",
+            board: boardState,
+            appliedMutations: [],
+            ignoredMutations: [],
+          }),
+          { status: 200 }
+        );
+      }
       if (!url.endsWith("/api/board")) {
         return Promise.reject(new Error(`Unhandled fetch URL in tests: ${url}`));
       }
 
-      const method = init?.method ?? "GET";
       if (method === "GET") {
         return new Response(JSON.stringify(boardState), { status: 200 });
       }

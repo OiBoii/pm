@@ -12,7 +12,7 @@ Guiding constraints from `AGENTS.md`:
 ## Current implementation status
 
 - Parts 1-7: completed.
-- Parts 8-10: not started.
+- Parts 8-10: completed.
 - Approval gates completed:
   - Gate 1 (rewritten plan): completed.
   - Gate 2 (DB schema sign-off for Part 5): completed.
@@ -187,19 +187,19 @@ Key decisions captured during implementation:
 ## Part 10: AI Sidebar in Frontend
 
 ### Checklist
-- [ ] Add sidebar chat UI integrated into the board page.
-- [ ] Render conversation history and submit user prompts.
-- [ ] Wire chat requests to backend AI endpoint.
-- [ ] Apply backend-confirmed board updates and refresh UI automatically.
-- [ ] Keep styling aligned with project color scheme in `AGENTS.md`.
+- [x] Add sidebar chat UI integrated into the board page.
+- [x] Render conversation history and submit user prompts.
+- [x] Wire chat requests to backend AI endpoint.
+- [x] Apply backend-confirmed board updates and refresh UI automatically.
+- [x] Keep styling aligned with project color scheme in `AGENTS.md`.
 
 ### Tests
-- [ ] Component tests for chat input/send/render/error states.
-- [ ] Integration test: AI response updates cards/columns and UI reflects change.
+- [x] Component tests for chat input/send/render/error states.
+- [x] Integration test: AI response updates cards/columns and UI reflects change.
 
 ### Success criteria
-- [ ] User can chat in sidebar and receive responses.
-- [ ] AI-triggered board updates appear without manual page refresh.
+- [x] User can chat in sidebar and receive responses.
+- [x] AI-triggered board updates appear without manual page refresh.
 
 ## Cross-cutting checks (all implementation parts)
 
