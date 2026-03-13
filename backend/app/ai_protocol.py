@@ -4,9 +4,6 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
-MutationType = Literal["create_card", "edit_card", "move_card"]
-
-
 class ChatHistoryMessageModel(BaseModel):
     role: Literal["user", "assistant"]
     content: str
@@ -64,39 +61,20 @@ def build_ai_chat_prompt(
     question: str,
     history: list[dict[str, str]],
 ) -> str:
-    schema = {
+    target_shape = {
         "assistantResponse": "string",
         "mutations": [
-            {
-                "type": "create_card | edit_card | move_card",
-                "shape_examples": {
-                    "create_card": {
-                        "type": "create_card",
-                        "columnId": "col-backlog",
-                        "title": "New task",
-                        "details": "Task details",
-                        "position": 0,
-                    },
-                    "edit_card": {
-                        "type": "edit_card",
-                        "cardId": "card-1",
-                        "title": "Updated title",
-                        "details": "Updated details",
-                    },
-                    "move_card": {
-                        "type": "move_card",
-                        "cardId": "card-1",
-                        "toColumnId": "col-progress",
-                        "position": 0,
-                    },
-                },
-            }
+            {"type": "create_card", "columnId": "string", "title": "string", "details": "string", "position": 0},
+            {"type": "edit_card", "cardId": "string", "title": "string", "details": "string"},
+            {"type": "move_card", "cardId": "string", "toColumnId": "string", "position": 0},
         ],
     }
     return (
         "You are a project management assistant for a Kanban board.\n"
-        "Return ONLY strict JSON with this exact shape and keys:\n"
-        f"{json.dumps(schema)}\n\n"
+        "Return ONLY strict JSON.\n"
+        "Do NOT include any helper keys like shape_examples.\n"
+        "Top-level keys must be exactly: assistantResponse, mutations.\n"
+        f"Target shape:\n{json.dumps(target_shape)}\n\n"
         "Rules:\n"
         "- Always include assistantResponse.\n"
         "- mutations is optional, but if present must only include valid create_card, edit_card, or move_card objects.\n"
@@ -109,6 +87,7 @@ def build_ai_chat_prompt(
 
 def parse_ai_structured_response(raw_text: str) -> AIStructuredResponseModel:
     payload = _extract_json_payload(raw_text)
+    payload = _normalize_payload(payload)
     try:
         return AIStructuredResponseModel.model_validate(payload)
     except ValidationError as exc:
@@ -117,8 +96,9 @@ def parse_ai_structured_response(raw_text: str) -> AIStructuredResponseModel:
 
 def _extract_json_payload(raw_text: str) -> dict[str, Any]:
     stripped = raw_text.strip()
+    decoder = json.JSONDecoder()
     try:
-        parsed = json.loads(stripped)
+        parsed, _ = decoder.raw_decode(stripped)
         if isinstance(parsed, dict):
             return parsed
     except json.JSONDecodeError:
@@ -127,19 +107,53 @@ def _extract_json_payload(raw_text: str) -> dict[str, Any]:
     fenced_match = re.search(r"```(?:json)?\s*(\{.*\})\s*```", stripped, re.DOTALL)
     if fenced_match:
         candidate = fenced_match.group(1)
-        parsed = json.loads(candidate)
-        if isinstance(parsed, dict):
-            return parsed
+        try:
+            parsed, _ = decoder.raw_decode(candidate)
+            if isinstance(parsed, dict):
+                return parsed
+        except json.JSONDecodeError:
+            pass
 
     start = stripped.find("{")
     end = stripped.rfind("}")
     if start != -1 and end != -1 and start < end:
         candidate = stripped[start : end + 1]
-        parsed = json.loads(candidate)
-        if isinstance(parsed, dict):
-            return parsed
+        try:
+            parsed, _ = decoder.raw_decode(candidate)
+            if isinstance(parsed, dict):
+                return parsed
+        except json.JSONDecodeError:
+            pass
 
     raise ValueError("AI response did not contain a valid JSON object.")
+
+
+def _normalize_payload(payload: dict[str, Any]) -> dict[str, Any]:
+    raw_mutations = payload.get("mutations")
+    if not isinstance(raw_mutations, list):
+        return payload
+
+    normalized: list[Any] = []
+    for mutation in raw_mutations:
+        if not isinstance(mutation, dict):
+            normalized.append(mutation)
+            continue
+
+        shape_examples = mutation.get("shape_examples")
+        mutation_type = mutation.get("type")
+        if (
+            isinstance(shape_examples, dict)
+            and isinstance(mutation_type, str)
+            and isinstance(shape_examples.get(mutation_type), dict)
+        ):
+            normalized.append(shape_examples[mutation_type])
+            continue
+
+        normalized.append(mutation)
+
+    next_payload = dict(payload)
+    next_payload["mutations"] = normalized
+    return next_payload
 
 
 def apply_kanban_mutations(
