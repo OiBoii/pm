@@ -5,7 +5,7 @@ This document describes the current frontend codebase so future tasks can be exe
 ## Overview
 
 - Stack: Next.js App Router, React 19, TypeScript, Tailwind CSS v4.
-- Purpose: Kanban MVP frontend with demo auth gate and in-memory board state.
+- Purpose: Kanban MVP frontend with demo auth gate, persisted board state, and AI sidebar chat.
 - Entry route: `/` renders an auth gate, then the board when authenticated.
 - Current status: Frontend auth flow implemented (`user` / `password`), backend persistence not yet integrated.
 
@@ -21,6 +21,7 @@ This document describes the current frontend codebase so future tasks can be exe
 - `src/components/KanbanBoard.tsx`
   - Main board state container and interaction orchestration.
   - Handles drag start/end, column rename, add card, delete card.
+  - Hosts AI sidebar chat UI and sends prompts to backend AI endpoint.
   - Uses a container-aware collision strategy with explicit column drop zones for reliable drag/drop behavior.
 - `src/components/KanbanColumn.tsx`
   - Column UI, rename input, list of sortable cards, empty drop zone, add-card form.
@@ -32,6 +33,8 @@ This document describes the current frontend codebase so future tasks can be exe
   - Drag overlay preview card UI.
 - `src/lib/kanban.ts`
   - Domain types (`Card`, `Column`, `BoardData`), seed data, `moveCard`, `createId`.
+- `src/lib/api.ts`
+  - Backend API wrappers for board load/save and AI chat requests.
 
 ## Current behavior
 
@@ -45,6 +48,8 @@ This document describes the current frontend codebase so future tasks can be exe
   - drag cards within and across columns
 - Board state is maintained in local component state and persisted by backend `PUT /api/board`.
 - Added card IDs are generated client-side with `createId`.
+- Sidebar AI chat submits prompts to backend `POST /api/ai/chat`.
+- AI responses append to local conversation history and backend-confirmed board updates replace local board state.
 
 ## Drag-and-drop model
 
@@ -82,6 +87,9 @@ This document describes the current frontend codebase so future tasks can be exe
     - renders five columns
     - renames a column
     - adds and removes a card
+    - renders AI sidebar and sends chat prompts
+    - applies AI-returned board updates
+    - shows AI error state
   - `src/lib/kanban.test.ts`
     - verifies `moveCard` for same-column reorder, cross-column move, and append-on-drop
 - E2E tests:
@@ -89,6 +97,7 @@ This document describes the current frontend codebase so future tasks can be exe
     - board loads
     - add a card flow
     - drag card between columns
+    - AI chat request updates board UI
 - Commands from `package.json`:
   - `npm run test:unit`
   - `npm run test:e2e`
@@ -98,7 +107,7 @@ This document describes the current frontend codebase so future tasks can be exe
 
 - Auth/session is frontend-only and demo-scoped (sessionStorage + hardcoded credentials).
 - Board save currently happens on each mutation; there is no debounce/batching yet.
-- No AI sidebar implementation yet.
+- AI sidebar is implemented for MVP chat flow.
 
 ## Guidance for upcoming integration work
 

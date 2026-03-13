@@ -18,7 +18,7 @@ import {
 import { KanbanColumn } from "@/components/KanbanColumn";
 import { KanbanCardPreview } from "@/components/KanbanCardPreview";
 import { createId, moveCard, type BoardData } from "@/lib/kanban";
-import { fetchBoard, saveBoard } from "@/lib/api";
+import { fetchBoard, saveBoard, sendAIChat, type ChatMessage } from "@/lib/api";
 
 const COLUMN_DROP_ZONE_PREFIX = "column-drop::";
 
@@ -36,6 +36,11 @@ export const KanbanBoard = () => {
   const [isLoading, setIsLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [saveError, setSaveError] = useState<string | null>(null);
+  const [chatHistory, setChatHistory] = useState<ChatMessage[]>([]);
+  const [chatInput, setChatInput] = useState("");
+  const [chatError, setChatError] = useState<string | null>(null);
+  const [isSendingChat, setIsSendingChat] = useState(false);
+  const [isChatOpen, setIsChatOpen] = useState(false);
 
   const sensors = useSensors(
     useSensor(PointerSensor, {
@@ -182,6 +187,41 @@ export const KanbanBoard = () => {
     }));
   };
 
+  const handleSendChat = async () => {
+    const question = chatInput.trim();
+    if (!question || isSendingChat) {
+      return;
+    }
+
+    setIsSendingChat(true);
+    setChatError(null);
+    setChatInput("");
+
+    const userMessage: ChatMessage = { role: "user", content: question };
+    const requestHistory = [...chatHistory];
+    setChatHistory((prev) => [...prev, userMessage]);
+
+    try {
+      const response = await sendAIChat(question, requestHistory);
+      setBoard(response.board);
+      setChatHistory((prev) => [
+        ...prev,
+        { role: "assistant", content: response.assistantResponse },
+      ]);
+    } catch (error) {
+      const message =
+        error instanceof Error && error.message.trim()
+          ? error.message
+          : "Could not reach AI assistant. Please try again.";
+      setChatError(message);
+      // Roll back optimistic user message to avoid false history on failed request.
+      setChatHistory((prev) => prev.slice(0, -1));
+      setChatInput(question);
+    } finally {
+      setIsSendingChat(false);
+    }
+  };
+
   const activeCard = activeCardId && board ? board.cards[activeCardId] : null;
 
   if (isLoading) {
@@ -285,6 +325,101 @@ export const KanbanBoard = () => {
             ) : null}
           </DragOverlay>
         </DndContext>
+
+        <button
+          type="button"
+          data-testid="ai-chat-launcher"
+          onClick={() => setIsChatOpen((open) => !open)}
+          className="fixed bottom-8 right-6 z-30 h-14 w-14 rounded-full bg-[var(--secondary-purple)] text-sm font-semibold uppercase tracking-wide text-white shadow-[0_16px_30px_rgba(117,57,145,0.4)] transition hover:scale-[1.03] hover:brightness-110"
+          aria-label={isChatOpen ? "Close AI chat" : "Open AI chat"}
+        >
+          {isChatOpen ? "x" : "AI"}
+        </button>
+
+        <aside
+          data-testid="ai-chat-sidebar"
+          className={`fixed bottom-28 right-6 z-20 flex h-[72vh] min-h-[520px] w-[360px] max-w-[calc(100vw-2.5rem)] flex-col rounded-3xl border border-[var(--stroke)] bg-white p-5 shadow-[var(--shadow)] transition duration-200 ${
+            isChatOpen
+              ? "pointer-events-auto translate-y-0 opacity-100"
+              : "pointer-events-none translate-y-3 opacity-0"
+          }`}
+        >
+          <div className="flex items-start justify-between border-b border-[var(--stroke)] pb-4">
+            <div>
+              <p className="text-xs font-semibold uppercase tracking-[0.35em] text-[var(--gray-text)]">
+                AI Assistant
+              </p>
+              <h2 className="mt-2 font-display text-2xl font-semibold text-[var(--navy-dark)]">
+                Board Chat
+              </h2>
+              <p className="mt-2 text-sm text-[var(--gray-text)]">
+                Ask for card edits, moves, and creation. Changes apply automatically.
+              </p>
+            </div>
+            <button
+              type="button"
+              onClick={() => setIsChatOpen(false)}
+              className="rounded-full border border-[var(--stroke)] px-2 py-1 text-xs font-semibold uppercase tracking-wide text-[var(--gray-text)] transition hover:text-[var(--navy-dark)]"
+            >
+              Close
+            </button>
+          </div>
+
+          <div className="mt-4 flex-1 space-y-3 overflow-y-auto pr-1">
+            {chatHistory.length === 0 ? (
+              <p className="rounded-2xl border border-dashed border-[var(--stroke)] px-4 py-3 text-sm text-[var(--gray-text)]">
+                No messages yet. Try: Move card-1 to Done.
+              </p>
+            ) : null}
+            {chatHistory.map((message, index) => (
+              <article
+                key={`${message.role}-${index}-${message.content}`}
+                className={`rounded-2xl px-4 py-3 text-sm leading-6 ${
+                  message.role === "user"
+                    ? "ml-8 border border-[var(--primary-blue)]/20 bg-[var(--primary-blue)]/10 text-[var(--navy-dark)]"
+                    : "mr-8 border border-[var(--secondary-purple)]/20 bg-[var(--secondary-purple)]/10 text-[var(--navy-dark)]"
+                }`}
+              >
+                <p className="mb-1 text-[10px] font-semibold uppercase tracking-[0.25em] text-[var(--gray-text)]">
+                  {message.role === "user" ? "You" : "Assistant"}
+                </p>
+                <p>{message.content}</p>
+              </article>
+            ))}
+          </div>
+
+          {chatError ? (
+            <p className="mt-3 text-sm font-medium text-[var(--secondary-purple)]">{chatError}</p>
+          ) : null}
+
+          <form
+            className="mt-4 space-y-3 border-t border-[var(--stroke)] pt-4"
+            onSubmit={(event) => {
+              event.preventDefault();
+              void handleSendChat();
+            }}
+          >
+            <label htmlFor="ai-chat-input" className="sr-only">
+              Chat message
+            </label>
+            <textarea
+              id="ai-chat-input"
+              data-testid="ai-chat-input"
+              value={chatInput}
+              onChange={(event) => setChatInput(event.target.value)}
+              placeholder="Ask the AI to update your board..."
+              className="min-h-[96px] w-full resize-none rounded-2xl border border-[var(--stroke)] bg-white px-3 py-2 text-sm text-[var(--navy-dark)] outline-none transition focus:border-[var(--primary-blue)]"
+              disabled={isSendingChat}
+            />
+            <button
+              type="submit"
+              className="w-full rounded-full bg-[var(--secondary-purple)] px-4 py-2 text-xs font-semibold uppercase tracking-wide text-white transition hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-60"
+              disabled={isSendingChat || !chatInput.trim()}
+            >
+              {isSendingChat ? "Sending..." : "Send"}
+            </button>
+          </form>
+        </aside>
       </main>
     </div>
   );
