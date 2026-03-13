@@ -1,7 +1,10 @@
 import json
+import re
 from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
+
+MutationType = Literal["create_card", "edit_card", "move_card"]
 
 
 class ChatHistoryMessageModel(BaseModel):
@@ -61,15 +64,43 @@ def build_ai_chat_prompt(
     question: str,
     history: list[dict[str, str]],
 ) -> str:
+    schema = {
+        "assistantResponse": "string",
+        "mutations": [
+            {
+                "type": "create_card | edit_card | move_card",
+                "shape_examples": {
+                    "create_card": {
+                        "type": "create_card",
+                        "columnId": "col-backlog",
+                        "title": "New task",
+                        "details": "Task details",
+                        "position": 0,
+                    },
+                    "edit_card": {
+                        "type": "edit_card",
+                        "cardId": "card-1",
+                        "title": "Updated title",
+                        "details": "Updated details",
+                    },
+                    "move_card": {
+                        "type": "move_card",
+                        "cardId": "card-1",
+                        "toColumnId": "col-progress",
+                        "position": 0,
+                    },
+                },
+            }
+        ],
+    }
     return (
-        "You are a Kanban assistant. Return ONLY valid JSON with keys "
-        "`assistantResponse` and optional `mutations`.\n"
-        "Mutation types allowed: create_card, edit_card, move_card.\n"
-        "Use shape:\n"
-        '{"assistantResponse":"...",'
-        '"mutations":[{"type":"create_card","columnId":"...","title":"...","details":"...","position":0},'
-        '{"type":"edit_card","cardId":"...","title":"...","details":"..."},'
-        '{"type":"move_card","cardId":"...","toColumnId":"...","position":0}]}\n\n'
+        "You are a project management assistant for a Kanban board.\n"
+        "Return ONLY strict JSON with this exact shape and keys:\n"
+        f"{json.dumps(schema)}\n\n"
+        "Rules:\n"
+        "- Always include assistantResponse.\n"
+        "- mutations is optional, but if present must only include valid create_card, edit_card, or move_card objects.\n"
+        "- Do not include markdown, explanations, or code fences.\n\n"
         f"Current board JSON:\n{json.dumps(board)}\n\n"
         f"Conversation history JSON:\n{json.dumps(history)}\n\n"
         f"User question:\n{question}"
@@ -77,49 +108,87 @@ def build_ai_chat_prompt(
 
 
 def parse_ai_structured_response(raw_text: str) -> AIStructuredResponseModel:
+    payload = _extract_json_payload(raw_text)
     try:
-        parsed = json.loads(raw_text)
-    except json.JSONDecodeError as exc:
-        raise ValueError("AI response did not contain valid JSON.") from exc
-
-    try:
-        return AIStructuredResponseModel.model_validate(parsed)
+        return AIStructuredResponseModel.model_validate(payload)
     except ValidationError as exc:
         raise ValueError(f"AI structured response validation failed: {exc}") from exc
+
+
+def _extract_json_payload(raw_text: str) -> dict[str, Any]:
+    stripped = raw_text.strip()
+    try:
+        parsed = json.loads(stripped)
+        if isinstance(parsed, dict):
+            return parsed
+    except json.JSONDecodeError:
+        pass
+
+    fenced_match = re.search(r"```(?:json)?\s*(\{.*\})\s*```", stripped, re.DOTALL)
+    if fenced_match:
+        candidate = fenced_match.group(1)
+        parsed = json.loads(candidate)
+        if isinstance(parsed, dict):
+            return parsed
+
+    start = stripped.find("{")
+    end = stripped.rfind("}")
+    if start != -1 and end != -1 and start < end:
+        candidate = stripped[start : end + 1]
+        parsed = json.loads(candidate)
+        if isinstance(parsed, dict):
+            return parsed
+
+    raise ValueError("AI response did not contain a valid JSON object.")
 
 
 def apply_kanban_mutations(
     board: dict[str, Any], mutations: list[MutationModel]
 ) -> tuple[dict[str, Any], list[dict[str, Any]], list[dict[str, Any]]]:
-    updated = json.loads(json.dumps(board))
+    updated_board = json.loads(json.dumps(board))
     applied: list[dict[str, Any]] = []
     ignored: list[dict[str, Any]] = []
 
     for mutation in mutations:
         if isinstance(mutation, CreateCardMutationModel):
-            target = next(
-                (column for column in updated.get("columns", []) if column.get("id") == mutation.column_id),
-                None,
-            )
-            if target is None:
-                ignored.append({"type": mutation.type, "reason": f"Unknown columnId: {mutation.column_id}"})
+            if not _column_exists(updated_board, mutation.column_id):
+                ignored.append(
+                    {
+                        "type": mutation.type,
+                        "reason": f"Unknown columnId: {mutation.column_id}",
+                    }
+                )
                 continue
-            next_id = _next_card_id(updated)
-            updated["cards"][next_id] = {
-                "id": next_id,
+            card_id = _next_card_id(updated_board)
+            updated_board["cards"][card_id] = {
+                "id": card_id,
                 "title": mutation.title,
                 "details": mutation.details,
             }
-            card_ids = target.setdefault("cardIds", [])
-            index = len(card_ids) if mutation.position is None else max(0, min(mutation.position, len(card_ids)))
-            card_ids.insert(index, next_id)
-            applied.append({"type": mutation.type, "cardId": next_id, "columnId": mutation.column_id})
+            _insert_card_in_column(
+                updated_board,
+                mutation.column_id,
+                card_id,
+                mutation.position,
+            )
+            applied.append(
+                {
+                    "type": mutation.type,
+                    "cardId": card_id,
+                    "columnId": mutation.column_id,
+                }
+            )
             continue
 
         if isinstance(mutation, EditCardMutationModel):
-            card = updated.get("cards", {}).get(mutation.card_id)
+            card = updated_board.get("cards", {}).get(mutation.card_id)
             if not isinstance(card, dict):
-                ignored.append({"type": mutation.type, "reason": f"Unknown cardId: {mutation.card_id}"})
+                ignored.append(
+                    {
+                        "type": mutation.type,
+                        "reason": f"Unknown cardId: {mutation.card_id}",
+                    }
+                )
                 continue
             if mutation.title is not None:
                 card["title"] = mutation.title
@@ -129,37 +198,67 @@ def apply_kanban_mutations(
             continue
 
         if isinstance(mutation, MoveCardMutationModel):
-            if mutation.card_id not in updated.get("cards", {}):
-                ignored.append({"type": mutation.type, "reason": f"Unknown cardId: {mutation.card_id}"})
-                continue
-            target = next(
-                (column for column in updated.get("columns", []) if column.get("id") == mutation.to_column_id),
-                None,
-            )
-            if target is None:
+            if mutation.card_id not in updated_board.get("cards", {}):
                 ignored.append(
-                    {"type": mutation.type, "reason": f"Unknown toColumnId: {mutation.to_column_id}"}
+                    {
+                        "type": mutation.type,
+                        "reason": f"Unknown cardId: {mutation.card_id}",
+                    }
                 )
                 continue
-            for column in updated.get("columns", []):
+            if not _column_exists(updated_board, mutation.to_column_id):
+                ignored.append(
+                    {
+                        "type": mutation.type,
+                        "reason": f"Unknown toColumnId: {mutation.to_column_id}",
+                    }
+                )
+                continue
+
+            for column in updated_board.get("columns", []):
                 card_ids = column.get("cardIds", [])
                 if mutation.card_id in card_ids:
                     card_ids.remove(mutation.card_id)
-            target_ids = target.setdefault("cardIds", [])
-            index = len(target_ids) if mutation.position is None else max(0, min(mutation.position, len(target_ids)))
-            target_ids.insert(index, mutation.card_id)
+
+            _insert_card_in_column(
+                updated_board,
+                mutation.to_column_id,
+                mutation.card_id,
+                mutation.position,
+            )
             applied.append(
-                {"type": mutation.type, "cardId": mutation.card_id, "toColumnId": mutation.to_column_id}
+                {
+                    "type": mutation.type,
+                    "cardId": mutation.card_id,
+                    "toColumnId": mutation.to_column_id,
+                }
             )
 
-    return updated, applied, ignored
+    return updated_board, applied, ignored
+
+
+def _column_exists(board: dict[str, Any], column_id: str) -> bool:
+    return any(column.get("id") == column_id for column in board.get("columns", []))
+
+
+def _insert_card_in_column(
+    board: dict[str, Any], column_id: str, card_id: str, position: int | None
+) -> None:
+    for column in board.get("columns", []):
+        if column.get("id") != column_id:
+            continue
+        card_ids = column.setdefault("cardIds", [])
+        if card_id in card_ids:
+            card_ids.remove(card_id)
+        index = len(card_ids) if position is None else max(0, min(position, len(card_ids)))
+        card_ids.insert(index, card_id)
+        return
 
 
 def _next_card_id(board: dict[str, Any]) -> str:
     highest = 0
     for card_id in board.get("cards", {}).keys():
-        if card_id.startswith("card-"):
-            suffix = card_id[5:]
-            if suffix.isdigit():
-                highest = max(highest, int(suffix))
+        match = re.fullmatch(r"card-(\d+)", card_id)
+        if match:
+            highest = max(highest, int(match.group(1)))
     return f"card-{highest + 1}"
