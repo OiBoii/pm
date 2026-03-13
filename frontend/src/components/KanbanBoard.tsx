@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useState } from "react";
 import {
   type Collision,
   type CollisionDetection,
@@ -62,7 +62,12 @@ export const KanbanBoard = () => {
   };
 
   const handleDragEnd = (event: DragEndEvent) => {
-    const { active, over, active: { rect: activeRect }, over: overTarget } = event;
+    const {
+      active,
+      over,
+      active: { rect: activeRect },
+      over: overTarget,
+    } = event;
     setActiveCardId(null);
 
     if (!over || active.id === over.id || !overTarget) {
@@ -73,14 +78,17 @@ export const KanbanBoard = () => {
     const isOverDropZone = isColumnDropZoneId(String(over.id));
 
     let insertAfter = false;
-    
+
     // If dropping onto a specific card, determine if we should insert before or after it
     if (!isOverDropZone && overTarget.rect) {
-      const overRect = overTarget.rect;
-      // If the active card's center is below the over card's center, we insert after
-      const activeCenter = activeRect.current.translated!.top + activeRect.current.translated!.height / 2;
-      const overCenter = overRect.top + overRect.height / 2;
-      insertAfter = activeCenter > overCenter;
+      const translatedRect = activeRect.current.translated;
+      if (translatedRect) {
+        const overRect = overTarget.rect;
+        // If the active card's center is below the over card's center, we insert after
+        const activeCenter = translatedRect.top + translatedRect.height / 2;
+        const overCenter = overRect.top + overRect.height / 2;
+        insertAfter = activeCenter > overCenter;
+      }
     }
 
     setBoard((prev) => ({
