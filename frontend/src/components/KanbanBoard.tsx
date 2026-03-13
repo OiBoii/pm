@@ -62,18 +62,30 @@ export const KanbanBoard = () => {
   };
 
   const handleDragEnd = (event: DragEndEvent) => {
-    const { active, over } = event;
+    const { active, over, active: { rect: activeRect }, over: overTarget } = event;
     setActiveCardId(null);
 
-    if (!over || active.id === over.id) {
+    if (!over || active.id === over.id || !overTarget) {
       return;
     }
 
     const overId = normalizeOverId(String(over.id));
+    const isOverDropZone = isColumnDropZoneId(String(over.id));
+
+    let insertAfter = false;
+    
+    // If dropping onto a specific card, determine if we should insert before or after it
+    if (!isOverDropZone && overTarget.rect) {
+      const overRect = overTarget.rect;
+      // If the active card's center is below the over card's center, we insert after
+      const activeCenter = activeRect.current.translated!.top + activeRect.current.translated!.height / 2;
+      const overCenter = overRect.top + overRect.height / 2;
+      insertAfter = activeCenter > overCenter;
+    }
 
     setBoard((prev) => ({
       ...prev,
-      columns: moveCard(prev.columns, active.id as string, overId),
+      columns: moveCard(prev.columns, active.id as string, overId, insertAfter),
     }));
   };
 

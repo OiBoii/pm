@@ -84,7 +84,8 @@ const findColumnId = (columns: Column[], id: string) => {
 export const moveCard = (
   columns: Column[],
   activeId: string,
-  overId: string
+  overId: string,
+  insertAfter: boolean = false
 ): Column[] => {
   const activeColumnId = findColumnId(columns, activeId);
   const overColumnId = findColumnId(columns, overId);
@@ -124,7 +125,16 @@ export const moveCard = (
 
     const nextCardIds = [...activeColumn.cardIds];
     nextCardIds.splice(oldIndex, 1);
-    nextCardIds.splice(newIndex, 0, activeId);
+    
+    // Adjust newIndex if we need to insert after the target
+    let adjustedNewIndex = newIndex;
+    if (insertAfter && oldIndex >= newIndex) {
+      adjustedNewIndex += 1;
+    } else if (!insertAfter && oldIndex < newIndex) {
+      adjustedNewIndex -= 1;
+    }
+    
+    nextCardIds.splice(adjustedNewIndex, 0, activeId);
 
     return columns.map((column) =>
       column.id === activeColumnId
@@ -146,7 +156,10 @@ export const moveCard = (
     nextOverCardIds.push(activeId);
   } else {
     const overIndex = overColumn.cardIds.indexOf(overId);
-    const insertIndex = overIndex === -1 ? nextOverCardIds.length : overIndex;
+    let insertIndex = overIndex === -1 ? nextOverCardIds.length : overIndex;
+    if (insertAfter && overIndex !== -1) {
+      insertIndex += 1;
+    }
     nextOverCardIds.splice(insertIndex, 0, activeId);
   }
 
