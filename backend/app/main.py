@@ -24,7 +24,6 @@ def create_app() -> FastAPI:
             "status": "ok",
         }
 
-    # Mount static app at root so built frontend assets and index are served.
     app.mount("/", StaticFiles(directory=resolve_static_dir(), html=True), name="frontend")
     return app
 
