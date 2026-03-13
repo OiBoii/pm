@@ -26,7 +26,7 @@ export const KanbanColumn = ({
   const { over } = useDndContext();
   const overId = over ? String(over.id) : "";
   const isColumnHighlighted =
-    overId === dropZoneId || column.cardIds.includes(overId) || overId === column.id;
+    overId === dropZoneId || column.cardIds.includes(overId);
 
   return (
     <section

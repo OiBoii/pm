@@ -1,7 +1,8 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 import {
+  type Collision,
   type CollisionDetection,
   DndContext,
   DragOverlay,
@@ -20,6 +21,14 @@ import { createId, initialData, moveCard, type BoardData } from "@/lib/kanban";
 
 const COLUMN_DROP_ZONE_PREFIX = "column-drop::";
 
+const isColumnDropZoneId = (id: string) => id.startsWith(COLUMN_DROP_ZONE_PREFIX);
+
+const normalizeOverId = (id: string) =>
+  isColumnDropZoneId(id) ? id.slice(COLUMN_DROP_ZONE_PREFIX.length) : id;
+
+const filterDropZoneHits = (hits: Collision[]) =>
+  hits.filter((collision) => isColumnDropZoneId(String(collision.id)));
+
 export const KanbanBoard = () => {
   const [board, setBoard] = useState<BoardData>(() => initialData);
   const [activeCardId, setActiveCardId] = useState<string | null>(null);
@@ -30,54 +39,53 @@ export const KanbanBoard = () => {
     })
   );
 
-  const cardsById = useMemo(() => board.cards, [board.cards]);
-  const isColumnDropZoneId = (id: string) => id.startsWith(COLUMN_DROP_ZONE_PREFIX);
-  const normalizeOverId = (id: string) =>
-    isColumnDropZoneId(id) ? id.slice(COLUMN_DROP_ZONE_PREFIX.length) : id;
-
-  const collisionDetectionStrategy: CollisionDetection = (args) => {
+  const collisionDetectionStrategy: CollisionDetection = useCallback((args) => {
     const pointerHits = pointerWithin(args);
     if (pointerHits.length > 0) {
-      const pointerDropZoneHits = pointerHits.filter((collision) =>
-        isColumnDropZoneId(String(collision.id))
-      );
-      if (pointerDropZoneHits.length > 0) {
-        return pointerDropZoneHits;
-      }
-      return pointerHits;
+      const cardHits = pointerHits.filter((c) => !isColumnDropZoneId(String(c.id)));
+      if (cardHits.length > 0) return cardHits;
+      return filterDropZoneHits(pointerHits);
     }
 
     const rectHits = rectIntersection(args);
     if (rectHits.length > 0) {
-      const rectDropZoneHits = rectHits.filter((collision) =>
-        isColumnDropZoneId(String(collision.id))
-      );
-      if (rectDropZoneHits.length > 0) {
-        return rectDropZoneHits;
-      }
-      return rectHits;
+      const cardHits = rectHits.filter((c) => !isColumnDropZoneId(String(c.id)));
+      if (cardHits.length > 0) return cardHits;
+      return filterDropZoneHits(rectHits);
     }
 
     return closestCorners(args);
-  };
+  }, []);
 
   const handleDragStart = (event: DragStartEvent) => {
     setActiveCardId(event.active.id as string);
   };
 
   const handleDragEnd = (event: DragEndEvent) => {
-    const { active, over } = event;
+    const { active, over, active: { rect: activeRect }, over: overTarget } = event;
     setActiveCardId(null);
 
-    if (!over || active.id === over.id) {
+    if (!over || active.id === over.id || !overTarget) {
       return;
     }
 
     const overId = normalizeOverId(String(over.id));
+    const isOverDropZone = isColumnDropZoneId(String(over.id));
+
+    let insertAfter = false;
+    
+    // If dropping onto a specific card, determine if we should insert before or after it
+    if (!isOverDropZone && overTarget.rect) {
+      const overRect = overTarget.rect;
+      // If the active card's center is below the over card's center, we insert after
+      const activeCenter = activeRect.current.translated!.top + activeRect.current.translated!.height / 2;
+      const overCenter = overRect.top + overRect.height / 2;
+      insertAfter = activeCenter > overCenter;
+    }
 
     setBoard((prev) => ({
       ...prev,
-      columns: moveCard(prev.columns, active.id as string, overId),
+      columns: moveCard(prev.columns, active.id as string, overId, insertAfter),
     }));
   };
 
@@ -107,25 +115,20 @@ export const KanbanBoard = () => {
   };
 
   const handleDeleteCard = (columnId: string, cardId: string) => {
-    setBoard((prev) => {
-      return {
-        ...prev,
-        cards: Object.fromEntries(
-          Object.entries(prev.cards).filter(([id]) => id !== cardId)
-        ),
-        columns: prev.columns.map((column) =>
-          column.id === columnId
-            ? {
-                ...column,
-                cardIds: column.cardIds.filter((id) => id !== cardId),
-              }
-            : column
-        ),
-      };
-    });
+    setBoard((prev) => ({
+      ...prev,
+      cards: Object.fromEntries(
+        Object.entries(prev.cards).filter(([id]) => id !== cardId)
+      ),
+      columns: prev.columns.map((column) =>
+        column.id === columnId
+          ? { ...column, cardIds: column.cardIds.filter((id) => id !== cardId) }
+          : column
+      ),
+    }));
   };
 
-  const activeCard = activeCardId ? cardsById[activeCardId] : null;
+  const activeCard = activeCardId ? board.cards[activeCardId] : null;
 
   return (
     <div className="relative overflow-hidden">
