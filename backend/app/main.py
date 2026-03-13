@@ -6,6 +6,12 @@ from fastapi import FastAPI, HTTPException
 from fastapi.staticfiles import StaticFiles
 
 from app.ai_client import AIConfigError, AIRequestError, OpenAIClient
+from app.ai_protocol import (
+    AIChatRequestModel,
+    apply_kanban_mutations,
+    build_ai_chat_prompt,
+    parse_ai_structured_response,
+)
 from app.db import MVP_USERNAME, get_board, init_db, update_board
 from app.models import BoardModel
 
@@ -78,6 +84,40 @@ def create_app(db_path: Path | None = None) -> FastAPI:
             "model": client.model,
             "prompt": "2+2",
             "response": ai_response,
+        }
+
+    @app.post("/api/ai/chat")
+    def ai_chat(payload: AIChatRequestModel) -> dict[str, Any]:
+        current_board = get_board(resolved_db_path, MVP_USERNAME)
+        prompt = build_ai_chat_prompt(
+            board=current_board,
+            question=payload.question,
+            history=[message.model_dump() for message in payload.history],
+        )
+        try:
+            client = OpenAIClient()
+            raw_response = client.chat_completion(prompt)
+            structured = parse_ai_structured_response(raw_response)
+        except AIConfigError as exc:
+            raise HTTPException(status_code=503, detail=str(exc)) from exc
+        except AIRequestError as exc:
+            raise HTTPException(status_code=502, detail=str(exc)) from exc
+        except ValueError as exc:
+            raise HTTPException(status_code=502, detail=str(exc)) from exc
+
+        updated_board, applied_mutations, ignored_mutations = apply_kanban_mutations(
+            current_board,
+            structured.mutations,
+        )
+        _validate_board_integrity(updated_board)
+        if applied_mutations:
+            update_board(resolved_db_path, updated_board, MVP_USERNAME)
+
+        return {
+            "assistantResponse": structured.assistant_response,
+            "board": updated_board,
+            "appliedMutations": applied_mutations,
+            "ignoredMutations": ignored_mutations,
         }
 
     app.mount("/", StaticFiles(directory=resolve_static_dir(), html=True), name="frontend")
