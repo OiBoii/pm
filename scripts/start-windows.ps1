@@ -15,7 +15,12 @@ if ($existing -eq $ContainerName) {
 }
 
 Write-Host "Starting container: $ContainerName"
-docker run -d --name $ContainerName -p 8000:8000 $ImageName | Out-Null
+$EnvFile = Join-Path $ProjectRoot ".env"
+if (Test-Path $EnvFile) {
+    docker run -d --name $ContainerName --env-file $EnvFile -p 8000:8000 $ImageName | Out-Null
+} else {
+    docker run -d --name $ContainerName -p 8000:8000 $ImageName | Out-Null
+}
 
 Write-Host "App started:"
 Write-Host "  http://127.0.0.1:8000/"

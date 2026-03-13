@@ -11,12 +11,18 @@
 - Kanban persistence endpoints:
   - `GET /api/board`
   - `PUT /api/board`
+- AI connectivity debug endpoint:
+  - `GET /api/ai/debug` (OpenAI `2+2` connectivity check)
 - Unit tests in `backend/tests/test_main.py`.
 - Python dependencies and tooling declared in `backend/pyproject.toml`.
 - SQLite persistence layer:
   - `backend/app/db.py` initializes DB/tables and reads/writes board JSON.
   - `backend/app/board_data.py` defines initial seeded board.
   - `backend/app/models.py` defines request/response payload models.
+- OpenAI client:
+  - `backend/app/ai_client.py` sends chat completions to OpenAI.
+  - Reads API key from `OPENAI_API_KEY`.
+  - Uses `gpt-4.1-mini` by default (override with `OPENAI_MODEL`).
 
 ## Run model
 

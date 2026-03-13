@@ -145,21 +145,24 @@ Key decisions captured during implementation:
 - [x] Board state is persistent rather than demo-only memory state.
 - [x] Core board interactions remain smooth and reliable.
 
-## Part 8: AI Connectivity via OpenRouter
+## Part 8: AI Connectivity via OpenAI
 
 ### Checklist
-- [ ] Add backend AI client integration via OpenRouter.
-- [ ] Configure model usage as `openai/gpt-oss-120b`.
-- [ ] Load API key/config from environment variables.
-- [ ] Add a simple connectivity check flow (`2+2`) for verification.
+- [x] Add backend AI client integration via OpenAI.
+- [x] Configure model usage through `OPENAI_MODEL` (default `gpt-4.1-mini`).
+- [x] Load API key/config from environment variables using `OPENAI_API_KEY`.
+- [x] Add a dedicated backend test/debug endpoint for a simple connectivity check flow (`2+2`).
+- [x] Do not run AI connectivity checks at app startup.
+- [x] Keep startup allowed even if AI env vars are missing.
 
 ### Tests
-- [ ] Unit tests with mocked AI client responses.
-- [ ] Optional live connectivity smoke check when env vars are present.
+- [x] Unit tests with mocked AI client responses.
+- [ ] Optional live connectivity smoke check through the debug endpoint when env vars are present.
 
 ### Success criteria
 - [ ] Backend can make a successful AI call and parse a valid response.
-- [ ] Missing/invalid config produces clear startup or runtime errors.
+- [x] Missing/invalid AI config produces a clear runtime error only when the AI endpoint is called.
+- [x] Part 8 stays limited to client wiring + debug verification endpoint (structured output/chat protocol remains in Parts 9-10).
 
 ## Part 9: Structured Output Protocol for Board Updates
 

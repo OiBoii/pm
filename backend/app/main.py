@@ -5,6 +5,7 @@ from typing import Any
 from fastapi import FastAPI, HTTPException
 from fastapi.staticfiles import StaticFiles
 
+from app.ai_client import AIConfigError, AIRequestError, OpenAIClient
 from app.db import MVP_USERNAME, get_board, init_db, update_board
 from app.models import BoardModel
 
@@ -61,6 +62,23 @@ def create_app(db_path: Path | None = None) -> FastAPI:
         board = payload.model_dump(by_alias=True)
         _validate_board_integrity(board)
         return update_board(resolved_db_path, board, MVP_USERNAME)
+
+    @app.get("/api/ai/debug")
+    def ai_connectivity_debug() -> dict[str, str]:
+        try:
+            client = OpenAIClient()
+            ai_response = client.chat_completion("Answer with a single number: what is 2+2?")
+        except AIConfigError as exc:
+            raise HTTPException(status_code=503, detail=str(exc)) from exc
+        except AIRequestError as exc:
+            raise HTTPException(status_code=502, detail=str(exc)) from exc
+
+        return {
+            "status": "ok",
+            "model": client.model,
+            "prompt": "2+2",
+            "response": ai_response,
+        }
 
     app.mount("/", StaticFiles(directory=resolve_static_dir(), html=True), name="frontend")
     return app
