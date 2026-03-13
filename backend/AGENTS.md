@@ -8,8 +8,15 @@
   - `frontend/out` (when a frontend static build exists)
   - fallback: `backend/static`
 - Example API endpoint at `/api/hello`.
+- Kanban persistence endpoints:
+  - `GET /api/board`
+  - `PUT /api/board`
 - Unit tests in `backend/tests/test_main.py`.
 - Python dependencies and tooling declared in `backend/pyproject.toml`.
+- SQLite persistence layer:
+  - `backend/app/db.py` initializes DB/tables and reads/writes board JSON.
+  - `backend/app/board_data.py` defines initial seeded board.
+  - `backend/app/models.py` defines request/response payload models.
 
 ## Run model
 
