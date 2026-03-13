@@ -145,3 +145,109 @@ def test_ai_debug_endpoint_returns_runtime_request_error(
     response = client.get("/api/ai/debug")
     assert response.status_code == 502
     assert response.json()["detail"] == "upstream error"
+
+
+def test_ai_chat_endpoint_applies_mutations_and_persists(
+    tmp_path: Path, monkeypatch
+) -> None:
+    class StubOpenAIClient:
+        def __init__(self) -> None:
+            self.model = "gpt-4.1-mini"
+
+        def chat_completion(self, prompt: str) -> str:
+            assert "Current board JSON" in prompt
+            assert "User question" in prompt
+            return """
+            {
+              "assistantResponse": "Applied updates.",
+              "mutations": [
+                {
+                  "type": "create_card",
+                  "columnId": "col-backlog",
+                  "title": "Create from AI",
+                  "details": "Created by assistant"
+                },
+                {
+                  "type": "edit_card",
+                  "cardId": "card-1",
+                  "title": "Edited by AI"
+                },
+                {
+                  "type": "move_card",
+                  "cardId": "card-2",
+                  "toColumnId": "col-done",
+                  "position": 0
+                }
+              ]
+            }
+            """
+
+    monkeypatch.setattr("app.main.OpenAIClient", StubOpenAIClient)
+
+    db_path = tmp_path / "ai-chat.db"
+    client = create_test_client(db_path)
+    response = client.post(
+        "/api/ai/chat",
+        json={
+            "question": "Please create, edit, and move cards.",
+            "history": [{"role": "assistant", "content": "Ready to help."}],
+        },
+    )
+    assert response.status_code == 200
+    payload = response.json()
+
+    assert payload["assistantResponse"] == "Applied updates."
+    assert len(payload["appliedMutations"]) == 3
+    assert payload["ignoredMutations"] == []
+    assert payload["board"]["cards"]["card-1"]["title"] == "Edited by AI"
+    assert payload["board"]["columns"][4]["cardIds"][0] == "card-2"
+
+    persisted = client.get("/api/board").json()
+    assert persisted["cards"]["card-1"]["title"] == "Edited by AI"
+    assert persisted["columns"][4]["cardIds"][0] == "card-2"
+
+
+def test_ai_chat_endpoint_handles_invalid_model_output(
+    tmp_path: Path, monkeypatch
+) -> None:
+    class StubOpenAIClient:
+        def __init__(self) -> None:
+            self.model = "gpt-4.1-mini"
+
+        def chat_completion(self, prompt: str) -> str:
+            _ = prompt
+            return '{"assistant":"not matching schema"}'
+
+    monkeypatch.setattr("app.main.OpenAIClient", StubOpenAIClient)
+
+    client = create_test_client(tmp_path / "ai-chat-invalid.db")
+    response = client.post("/api/ai/chat", json={"question": "hello", "history": []})
+    assert response.status_code == 502
+    assert "validation failed" in response.json()["detail"].lower()
+
+
+def test_ai_chat_endpoint_non_mutation_response_keeps_board_same(
+    tmp_path: Path, monkeypatch
+) -> None:
+    class StubOpenAIClient:
+        def __init__(self) -> None:
+            self.model = "gpt-4.1-mini"
+
+        def chat_completion(self, prompt: str) -> str:
+            _ = prompt
+            return '{"assistantResponse":"No board changes needed.","mutations":[]}'
+
+    monkeypatch.setattr("app.main.OpenAIClient", StubOpenAIClient)
+
+    client = create_test_client(tmp_path / "ai-chat-no-mutations.db")
+    before = client.get("/api/board").json()
+    response = client.post(
+        "/api/ai/chat",
+        json={"question": "just summarize", "history": [{"role": "user", "content": "hi"}]},
+    )
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["appliedMutations"] == []
+    assert payload["ignoredMutations"] == []
+    assert payload["assistantResponse"] == "No board changes needed."
+    assert payload["board"] == before
