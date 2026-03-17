@@ -201,7 +201,21 @@ Key decisions captured during implementation:
 - [x] User can chat in sidebar and receive responses.
 - [x] AI-triggered board updates appear without manual page refresh.
 
-## Cross-cutting checks (all implementation parts)
+## Part 11: Vercel Deployment Migration
+
+### Checklist
+- [ ] Database Migration (Vercel Postgres)
+- [ ] API Route Migration (Next.js App Router)
+- [ ] AI Chat Migration (OpenAI SDK)
+- [ ] Cleanup Python backend
+
+### Tests
+- [ ] Next.js routes work successfully.
+- [ ] Vercel Postgres saves data successfully.
+
+### Success criteria
+- [ ] App is fully Next.js, ready for Vercel.
+
 
 ### Checklist
 - [ ] Run lint and relevant tests at each part completion.
